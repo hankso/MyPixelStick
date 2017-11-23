@@ -28,7 +28,7 @@ or
 
 #include <Adafruit_NeoPixel.h>
 #include <SD.h>
-#include <SoftwareSerial.h>
+//#include <SoftwareSerial.h>
 
 #define buttonBT   2
 #define buttonNext 3
@@ -37,8 +37,10 @@ or
 #define n_LEDs     30
 
 #define BT_baud    115200
-#define myport Serial // use hardware serial only for debugging
-// blueteeth softwareserial - RX 8, TX 9
+// connect RX0 to BT_TX and TX1 to BT_RX
+// remember to set BT baudrate by AT commands
+#define myport Serial 
+// bluetooth softwareserial - RX 8, TX 9
 //SoftwareSerial myport(8, 9);
 
 Adafruit_NeoPixel pixel = Adafruit_NeoPixel(n_LEDs, PixelPin, NEO_KHZ800 + NEO_RGB);
@@ -90,8 +92,8 @@ void setup(){
     pixel.begin();
     pixel.show();
 
-    //init_SD();
-    //if (!root) RUN = false;
+    init_SD();
+    if (!root) RUN = false;
     
     myport.println("type 'help' for more information");
 }
