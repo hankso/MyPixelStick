@@ -2,20 +2,22 @@
 - my pixelstick using arduino and library NeoPixel
 - in this version it can read commands from SD card or receive color data via blueteeth
 
-### Pin define
--SD card attached as follows:
-    -MOSI - pin 11
-    -MISO - pin 12
-    -CLK - pin 13
-    -CS - pin 4 (for MKRZero SD: SDCARD_SS_PIN)
+# Pin define
+- SD card attached as follows:
+    - MOSI - pin 11
+    - MISO - pin 12
+    - CLK - pin 13
+    - CS - pin 4 (for MKRZero SD: SDCARD_SS_PIN)
 
--PixelStick Data Pin 6
 
--Bluetooth
-    -RX --> Arduino TX1
-    -TX --> Arduino RX0
-    -baudrate: 115200(default)
-    -soft serial performs not so well at 115200, so use hard serial please
+- PixelStick Data Pin 6
+
+
+- Bluetooth
+    - RX --> Arduino TX1
+    - TX --> Arduino RX0
+    - baudrate: 115200(default)
+    - soft serial performs not so well at 115200, so use hard serial please
 
 # Arduino Interface
 - PixelStick
@@ -33,7 +35,7 @@
     - clear:  set all pixels off
     - pixel:  set num of pixels (e.g. 'pixel 30'|'pixel 50')
 
-![arduino interface](https://github.com/hankso/MyPixelStick/blob/master/Screenshot%20from%202017-11-24%2001.57.24.jpeg?raw=true)
+![arduino interface](https://github.com/hankso/MyPixelStick/Screenshot from 2017-11-24 23:30:17.png)
 (latest version test result is in file "Serial Monitor")
 
 ### Data format
