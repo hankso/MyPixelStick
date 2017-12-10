@@ -1,0 +1,42 @@
+Initializing...
+Loading SD card: failed, maybe not inserted.
+Try 'help' for more information.
+>>> help
+PixelStick by hank
+Version: 1.0.1 https://github.com/hankso/MyPixelStick
+Usage: [run|stop|next|prev|push|ls|ips|pixel|clear|time]
+
+>>> run
+Loading SD card: failed, maybe not inserted.
+RUN state: 1
+
+>>> stop
+RUN state: 0
+
+>>> clear
+All pixels clear now
+
+>>> next
+current file: No SD card.
+
+>>> prev
+current file: No SD card.
+
+>>> ls
+list_file error: dir unreadable, terminated.
+
+>>> pixel
+fixing bug...
+n_LEDs: 30
+
+>>> time
+t_Step: 10
+
+>>> ips
+ips>   1 255   0   0
+ips>   2   0 255   0
+ips>   3   0   0 255
+ips>   1 255 255 255
+ips> terminated('-1' detected)
+
+>>>
