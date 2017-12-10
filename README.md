@@ -35,25 +35,30 @@
     - clear:  set all pixels off
     - pixel:  set num of pixels (e.g. 'pixel 30'|'pixel 50')
 
-![arduino interface](https://github.com/hankso/MyPixelStick/Screenshot from 2017-11-24 23:30:17.png)
+![arduino interface](https://github.com/hankso/MyPixelStick/blob/master/Screenshot%20from%202017-11-24%2023:30:17.png)
+
 (latest version test result is in file "Serial Monitor")
 
 ### Data format
--Command file should have header and end like this:
-    -#file.txt#               // '#' + filename + '#'
-    -uint32_t data
-    -uint32_t data
-    -......
-    --1-1-1-1...              // more than two -1 for ensurance
+- Command file should have header and end like this:
+    - #file.txt#               // '#' + filename + '#'
+    - uint32_t data
+    - uint32_t data
+    - ......
+    - -1-1-1-1...              // more than two -1 for ensurance
 
--serial.parseInt() will return '0' if timeout, which may be misunderstanded as '0 0 0 0', so use '-1' as an indicator of end.
+- serial.parseInt() will return '0' if timeout, which may be misunderstanded as '0 0 0 0', so use '-1' as an indicator of end.
 
 ### printf
 There doesn't exist printf("%d",int) in arduino...
 In order not to use:
-    sprintf (buffer, "you send %d something here", foo);
-    Serial.print (buffer);
-I add some code to $ARDUINO_DIR/hardware/arduino/cores/Print.h more details at 'http://playground.arduino.cc/Main/Printf'
+```C++
+sprintf (buffer, "you send %d something here", foo);
+Serial.print (buffer);
+```
+I add some code to $ARDUINO_DIR/hardware/arduino/cores/Print.h.
+
+More details at http://playground.arduino.cc/Main/Printf
 
 -------------------------------------------
 TODO: acceleration sensor such as 'MMA7631' to change the t_Step(time step)
