@@ -19,7 +19,7 @@ file end:
     ......
     uint32_t
 	-1-1-1-1
-    
+
 
 Process example:
 
@@ -88,7 +88,7 @@ def find_port():
         if len(port_list)==1: return port_list[0]
         print('choose port from %s: '%' | '.join(port_list))
         while 1:
-            _ = raw_input('name: ') 
+            _ = raw_input('name: ')
             if _ in port_list:
                 return _
             print('invalid input...')
@@ -116,7 +116,7 @@ def parse_opt():
     except getopt.GetoptError, e:
         print("Unknown parameter '{}'".format(e.opt))
         HELP()
-        
+
     for i,j in opts:
         if i == '-h': HELP()
         elif i == '-i':
@@ -139,7 +139,7 @@ def parse_opt():
         if '-o' not in opts:
             to_file = from_file[:-4]
     except: HELP()
-    return from_file, to_file, n_LEDs, rotate 
+    return from_file, to_file, n_LEDs, rotate
 
 
 
@@ -148,24 +148,24 @@ if __name__ == '__main__':
     # in other word, in the parallel direction with movement
     from_file, to_file, n_LEDs, rotate = parse_opt()
     m_LEDs = 100
-    
+
     cmd_Step = 0.0015 # 1.5ms
     extra_Step = 0.015 # 15ms
-    
+
     port = find_port()
     print('Using port: '+port)
-    
+
     s = serial.Serial(port = port, baudrate = 115200)
     t_Step = get_Step(s)
     print('Current s_Step: {}ms'.format(t_Step*1000))
-    
+
     if from_file[-3:] in ['jpg', 'png']:
         MODE = 'PHOTO'
         # step 1
         img = cv2.imread(from_file)
         if rotate:
             img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-        
+
     elif from_file[-3:] in ['mp4', 'avi']:
         MODE = 'VIDEO'
         # open video file
@@ -179,45 +179,51 @@ if __name__ == '__main__':
         try: img = new()
         except: HELP()
         if img is None: HELP()
-        
-        
+
+
     # step 2
     h, w = img.shape[:2]
     v_d = w/n_LEDs
     h_d = h/m_LEDs
     # step 3
     img = img[::h_d, ::v_d]
-    
+
     # save cmd file to debug, you can comment it
     to_file += '_{}x{}_n{}'.format(w, h, n_LEDs) + '.cmd'
     f = open(to_file, 'w')
-    
+
     # awake pixelstick to send data
     s.write('push')
     time.sleep(3)
     print(s.read_all(), end='')
-    
+
     f.write('#%s#\n'%to_file)
     s.write('#%s#\n'%to_file)
-        
+
+    cv2.namedWindow('src', cv2.WINDOW_FREERATIO)
     stamp = time.time()
     while 1:
         try:
             for row in range(img.shape[0]):
+                cv2.imshow('src', cv2.line(img.copy(),
+                                           (0, row),
+                                           (img.shape[1], row),
+                                           (10, 240, 5),
+                                           2, cv2.LINE_AA))
                 for i, (b, g, r) in enumerate(img[row]): # opencv is BGR mode
                     # filter repeating datas
                     if row > 0:
-                        if ([g, r, b] == img[row-1, i]).all():
+                        if ([b, g, r] == img[row-1, i]).all():
                             continue
-                        
+
                     # adjust cmd_Step for best performance
                     time.sleep(cmd_Step)
                     print(s.read_all(), end='')
-                    
-                    t = str(i<<24|g<<16|r<<8|b) + '\n' # pixelstick is GRB mode
+
+                    t = str(i<<24|r<<16|g<<8|b) + '\n' # pixelstick is GRB mode, but we can set it in arduino
                     f.write(t)
                     s.write(t)
-                
+
                 # adjust extra_Step for best performance
                 time.sleep(t_Step + extra_Step)
                 print(s.read_all(), end='')
@@ -225,7 +231,7 @@ if __name__ == '__main__':
                     t = '\n'
                     f.write(t)
                     s.write(t)
-                    
+
                 if MODE == 'VIDEO':
                     duration = time.time() - stamp
                     frames = int(duration/ftd)
@@ -233,15 +239,15 @@ if __name__ == '__main__':
                     if img is None: break # going to the end of the video
                     img = img[::h_d, ::v_d]
                     stamp += ftd * frames
-            
+
             if MODE == 'PHOTO': break
-        
+
         except KeyboardInterrupt:
             f.write('-1-1-1-1')
             s.write('-1-1-1-1')
             print('Terminated.')
             sys.exit()
-                
+
     print('Done!')
     print('Image size: %d x %d, v_d: %d, h_d: %d'%(w, h, v_d, h_d))
     print('n_LEDs: %d  m_LEDs: %d'%(n_LEDs, m_LEDs))

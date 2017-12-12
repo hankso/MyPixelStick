@@ -29,6 +29,31 @@ In this version it can read commands from SD card or receive color data via blue
 - serial.parseInt() will return '0' if timeout, which may be
 misunderstanded as '0 0 0 0', so use '-1' as an indicator of end.
 
+### class <Adafruit_NeoPixel>
+- void
+    -[x] begin(void)
+    -[x] show(void)
+    - setPin(uint8_t p)
+    -[x] setPixelColor(uint16_t n, uint8_t r, uint8_t g, uint8_t b)
+    - setPixelColor(uint16_t n, uint8_t r, uint8_t g, uint8_t b, uint8_t w)
+    - setPixelColor(uint16_t n, uint32_t c)
+    -[ ] setBrightness(uint8_t)
+    -[ ] clear()
+    -[x] updateLength(uint16_t n)
+    - updateType(neoPixelType t)
+- uint8_t
+    - *getPixels(void) const,
+    - getBrightness(void) const;
+- int8_t
+    - getPin(void) { return pin; };
+- uint16_t
+    - numPixels(void) const;
+- static uint32_t
+    - Color(uint8_t r, uint8_t g, uint8_t b),
+    - Color(uint8_t r, uint8_t g, uint8_t b, uint8_t w);
+- uint32_t
+    - getPixelColor(uint16_t n) const;
+
 ### printf
 There doesn't exist printf("%d",int) in arduino...
 In order not to use:
@@ -47,19 +72,27 @@ i.e. horizontal pixel interval of an image
 #include <SD.h>
 //#include <SoftwareSerial.h>
 
+#define Lighterval 3
 #define SDPin      4
 #define PixelPin   6
+#define LightPin   7
 #define BT_baud    115200
 #define myport     Serial
 
-File data;              // current data file
-File root;              // root dir of SD card
-uint8_t  n_Files = 0;   // total txt file numbers in SD card
-uint8_t  c_Index = 0;   // current file index
-uint16_t n_LEDs  = 144; // pixel number
-uint16_t t_Step  = 10;  // time interval, this controls displaying speed
-bool RUN = false;       // soft on-off switch
-String FileNames;       // this string storage all txt file names
+File
+    data,                             // current data file
+    root;                             // root dir of SD card
+uint8_t
+    n_Files = 0,                      // total txt file numbers in SD card
+    c_Index = 0,                      // current file index
+    LIGHT   = 0;
+uint16_t
+    n_LEDs  = 144,                    // pixel number
+    t_Step  = 10;                     // time interval, this controls displaying speed
+bool
+    RUN = false;                      // soft on-off switch
+String
+    FileNames;                        // this string storage all txt file names
 // About String FileNames:
 // I dont know how to create an appendable list of String in C++
 // (like "file_list.append('filename')" in python),
@@ -67,20 +100,26 @@ String FileNames;       // this string storage all txt file names
 // FileNames = "#1file#2file#3file......#nfile"
 // Maybe something like "char *stringList" will be more elegant
 
-Adafruit_NeoPixel pixel = Adafruit_NeoPixel(n_LEDs, PixelPin, NEO_KHZ800 + NEO_RGB);
+Adafruit_NeoPixel
+    pixel = Adafruit_NeoPixel(n_LEDs, PixelPin, NEO_KHZ800 + NEO_GRB);
 
-void HELP();                           //
-void init_SD();                        //
-void display();                        //
-void listen_serial();                  // handle all serial info
-void clear_pixel();                    // turn all pixel off
-void pixel_cmd();                      // interactive mode
-void bar(float);                       // showing effect of progress bar or music amptitude
-void rainbow(uint8_t);                 // embedded beautiful color pattern
-void receive_file(bool);               // receive commands from serial
-uint8_t list_file(File, uint8_t);      // list all files in SD card and return numbers of all
-uint32_t Wheel(byte);                  // work with "void rainbow(uint8_t)""
-String get_filename(uint8_t*, String); // return current cmd file name
+void
+    HELP(),                           //
+    init_SD(),                        //
+    display(),                        //
+    listen_serial(),                  // handle all serial info
+    clear_pixel(),                    // turn all pixel off
+    pixel_cmd(),                      // interactive mode
+    bar(float),                       // showing effect of progress bar or music amptitude
+    rainbow(uint8_t),                 // embedded beautiful color pattern
+    receive_file(bool);               // receive commands from serial
+uint8_t
+    list_file(File, uint8_t),         // list all files in SD card and return numbers of all
+    readCapacitivePin(int);           // maybe future touchment detection add-ons
+uint32_t
+    Wheel(byte);                      // work with "void rainbow(uint8_t)""
+String
+    get_filename(uint8_t*, String);   // return current cmd file name
 
 
 void setup(){
@@ -96,6 +135,7 @@ void setup(){
 
     pixel.begin();
     pixel.show();
+    clear_pixel();
 
     init_SD();
     myport.print("Try 'help' for more information.\n>>> ");
@@ -104,14 +144,6 @@ void setup(){
 void loop(){
     listen_serial();
     if (RUN) display();
-
-    // use as light
-    if (digitalRead(5)){
-        for(int i; i < n_LEDs; i++)
-            pixel.setPixelColor(i, 128, 128, 128);
-        pixel.show();
-        delay(1000*10);
-    }
 }
 
 void HELP(){
@@ -121,7 +153,7 @@ void HELP(){
     // uncomment this part for nano
     myport.println("PixelStick by hank");
     myport.println("Version: 1.0.1 https://github.com/hankso/MyPixelStick");
-    myport.println("Usage: [run|stop|next|prev|push|ls|ips|pixel|clear|time]");
+    myport.println("Usage: [run|stop|next|prev|push|ls|ips|pixel|clear|time|bar]");
     //*/
     /*
     // uncomment this part for uno
@@ -139,8 +171,15 @@ void HELP(){
     myport.println("    pixel:  set num of pixels(e.g. 'pixel 30'|'pixel 50')");
     myport.println("    clear:  turn off all pixels");
     myport.println("    time:   set time-duration(e.g. 'time-10'|'time+50'|'time=20')");
+    myport.println("    bar:    show music amptitude or process bar");
     */
 
+}
+
+void clear_pixel(){
+    for (int i = 0; i < n_LEDs; i++)
+        pixel.setPixelColor(i, 0, 0, 0);
+    pixel.show();
 }
 
 void init_SD(){
@@ -211,12 +250,6 @@ String get_filename(uint8_t* index, String namelist){
     return namelist.substring(i, j);
 }
 
-void clear_pixel(uint8_t value = 0){
-    for (int i = 0; i < n_LEDs; i++)
-        pixel.setPixelColor(i, value, value, value);
-    pixel.show();
-}
-
 void pixel_cmd(){
     int i;
     uint8_t r, g, b;
@@ -249,7 +282,15 @@ void pixel_cmd(){
 }
 
 void display(){
-
+    // use as light
+    if (readCapacitivePin(LightPin) > 5){
+        LIGHT++;
+        if (LIGHT > Lighterval) LIGHT = 0;
+        uint8_t t = LIGHT*(255/Lighterval);
+        for(int i; i < n_LEDs; i++)
+            pixel.setPixelColor(i, t, t, t);
+        pixel.show();
+    }
     if (!root)
         rainbow(5);
     else{
@@ -399,19 +440,16 @@ void listen_serial(){
                 myport.println("t_Step: " + String(t_Step));
             }
             else if (msg.startsWith("pixel")){
-                myport.println("fixing bug...");
-                /*
                 if (msg.length() > 5){
                     if (msg.substring(5).toInt() > 0){
                         n_LEDs = msg.substring(5).toInt();
-                        Adafruit_NeoPixel pixel = Adafruit_NeoPixel(n_LEDs, PixelPin, NEO_KHZ800 + NEO_RGB);
-                        pixel.begin();
-                        pixel.show();
-                        clear_pixel();
+                        pixel.updateLength(n_LEDs);
                     }
                 }
-                */
                 myport.println("n_LEDs: " + String(n_LEDs));
+            }
+            else if (msg.startsWith("bar") && msg.length() > 3){
+                bar(abs(msg.substring(3).toFloat()));
             }
             else if (msg == "run") {
                 if (!root) init_SD();
@@ -451,12 +489,14 @@ void listen_serial(){
 }
 
 void bar(float rate){
-    if (rate <= 1){
+    if (rate <= 1 && rate >= 0){
         uint8_t n = n_LEDs * rate;
         pixel.setPixelColor(n, 10, 200, 10);
         while (n > 0)
             pixel.setPixelColor(--n, 128, 128, 128);
         pixel.show();
+        delay(1000);
+        clear_pixel();
     }
 }
 
@@ -482,4 +522,53 @@ uint32_t Wheel(byte WheelPos){
           WheelPos -= 170;
           return pixel.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
       }
+}
+
+uint8_t readCapacitivePin(int pinToMeasure) {
+    // this function is from http://playground.arduino.cc/Code/CapacitiveSensor
+    // pretty useful when implementing touch-detect utilities
+    // Thanks to Mario Becker et al.
+
+    volatile uint8_t* port;
+    volatile uint8_t* ddr;
+    volatile uint8_t* pin;
+    byte bitmask;
+    port = portOutputRegister(digitalPinToPort(pinToMeasure));
+    ddr = portModeRegister(digitalPinToPort(pinToMeasure));
+    bitmask = digitalPinToBitMask(pinToMeasure);
+    pin = portInputRegister(digitalPinToPort(pinToMeasure));
+    // Discharge the pin first by setting it low and output
+    *port &= ~(bitmask);
+    *ddr |= bitmask;
+    delay(1);
+    // Make the pin an input with the internal pull-up on
+    *ddr &= ~(bitmask);
+    *port |= bitmask;
+    uint8_t cycles = 17;
+    if      (*pin & bitmask) { cycles = 0;}
+    else if (*pin & bitmask) { cycles = 1;}
+    else if (*pin & bitmask) { cycles = 2;}
+    else if (*pin & bitmask) { cycles = 3;}
+    else if (*pin & bitmask) { cycles = 4;}
+    else if (*pin & bitmask) { cycles = 5;}
+    else if (*pin & bitmask) { cycles = 6;}
+    else if (*pin & bitmask) { cycles = 7;}
+    else if (*pin & bitmask) { cycles = 8;}
+    else if (*pin & bitmask) { cycles = 9;}
+    else if (*pin & bitmask) { cycles = 10;}
+    else if (*pin & bitmask) { cycles = 11;}
+    else if (*pin & bitmask) { cycles = 12;}
+    else if (*pin & bitmask) { cycles = 13;}
+    else if (*pin & bitmask) { cycles = 14;}
+    else if (*pin & bitmask) { cycles = 15;}
+    else if (*pin & bitmask) { cycles = 16;}
+    // Discharge the pin again by setting it low and output
+    // It's important to leave the pins low if you want to
+    // be able to touch more than 1 sensor at a time - if
+    // the sensor is left pulled high, when you touch
+    // two sensors, your body will transfer the charge between
+    // sensors.
+    *port &= ~(bitmask);
+    *ddr |= bitmask;
+    return cycles;
 }
