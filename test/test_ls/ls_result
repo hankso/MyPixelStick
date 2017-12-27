@@ -1,0 +1,76 @@
+Loading SD card: done!
+NEWFOL~1/
+|   TEST/
+|   |   HAHAHAHA/
+|   |   |   PIXEL_~1.PY		7513
+|   |   |   SERIAL~1.INF		666
+|   |   |   MYPIXE~1.INO		19837
+|   |   RAINBOW.JPG		6810
+|   CMDS/
+|   |   RAINBOW.CMD		1936
+|   |   RAINBO~1.CMD		329
+|   |   TEST1.CMD		72188
+|   |   TEST2.CMD		226408
+|   |   TEST_30.CMD		1195
+|   |   TEST_30_.CMD		8813
+|   |   TEST_40.CMD		16068
+|   |   TEST_3~1.CMD		5320
+|   |   TEST_6~1.CMD		29397
+|   |   TEST_9~1.CMD		28806
+ANDROID/
+|   DATA/
+|   |   NOMEDI~1		0
+|   |   COMMEI~1.SAF/
+|   |   |Loading SD card: done!
+abstestls finished
+   FILES/
+
+Loading SD card: done!
+newfol~1
+|---test
+|   |---hahahaha
+|   |   |     rainbow.jpg
+|   |---sdafd
+|---cmds
+|   |   N1 rainbow.cmd 1936
+|   | > N2 rainbo~1.cmd 329
+|   |   No.10 test1.cmd 72188
+|   |   12:test2.cmd 226408
+|   | > 13:test_30.cmd 1195
+|   |   tesLoading SD card: abstest/ dasls finished
+Loading SD card: abstest/ dasls finished
+t_30_.cmd 8813
+|   |   test_40.cmd 16068
+|   |   test_3~1.cmd 5320
+|   |   11 test_6~1.cmd 29397
+|   |>> 12 test_9~1.cmd 28806
+android
+|   data
+|   |   |      nomedi~1
+|   |   commei~1.saf
+
+
+Loading SD card: done!
+./
+|---NEWFOL~1/
+|   |---TEST/
+|   |   |---HAHAHAHA/
+|   |   |   rainbow.jpg
+|   |---CMDS/
+|   |   |    0 rainbow.cmd  1.89KB
+|   |   |    1 rainbo~1.cmd  0.32KB
+|   |   | >  2 test1.cmd  70.50KB
+|   |   |    3 test2.cmd  221.10KB
+|   |   |    4 test_30.cmd  1.17KB
+|   |   |    5 test_30_.cmd  8.61KB
+|   |   |    6 test_40.cmd  15.69KB
+|   |   |    7 test_3~1.cmd  5.20KB
+|   |   |    8 test_6~1.cmd  28.71KB
+|   |   |    9 test_9~1.cmd  28.13KB
+|---ANDROID/
+|   |---DATA/
+|   |   |   nomedi~1
+|   |   |---COMMEI~1.SAF/
+ls finished, found 10 cmd files
+
+test1.cmd

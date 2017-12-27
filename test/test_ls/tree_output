@@ -1,0 +1,44 @@
+.
+├── FFTconstant.py
+├── fft-test2.jpg
+├── fft-test.jpg
+├── keras
+│   ├── cifar-10-batches-py
+│   │   ├── batches.meta
+│   │   ├── data_batch_1
+│   │   ├── data_batch_2
+│   │   ├── data_batch_3
+│   │   ├── data_batch_4
+│   │   ├── data_batch_5
+│   │   ├── readme.html
+│   │   └── test_batch
+│   ├── digits
+│   │   ├── classifier-17K-20170524.h5
+│   │   ├── classifier-with-weights-122K-20170525.h5
+│   │   ├── CNN-1.6M-20170602.h5
+│   │   ├── CNN-with-weights-4.9M-20170602.h5
+│   │   ├── digits-5000-20-20.npz
+│   │   ├── digits-5000-400.npz
+│   │   ├── digits-origin.npz
+│   │   ├── digits.png
+│   │   └── RNN-with-weight-70K-20170609.h5
+│   ├── keras.py
+│   └── pima
+│       ├── pima-indians-diabetes.data.txt
+│       ├── pima-indians-diabetes.h5
+│       ├── pima-indians-diabetes.names.txt
+│       ├── pima-loss-acc.png
+│       ├── pima-loss-acc.svg
+│       ├── plot.plt
+│       └── result.dat
+├── Mastering the game of Go with deep\012neural networks and tree search.pdf
+├── RL
+│   ├── Maze.py
+│   ├── Maze.pyc
+│   ├── Qlearning-20170614.py
+│   ├── RL.py
+│   ├── RL.pyc
+│   └── run.py
+└── tensorflow-zh.pdf
+
+6 directories, 237 files

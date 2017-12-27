@@ -5,19 +5,21 @@ Date: 2017.11.8
 In this version it can read commands from SD card or receive color data via blueteeth
 
 ### Pin define
-- SD card attached as follows:
-    - MOSI - pin 11
-    - MISO - pin 12
-    - CLK - pin 13
-    - CS - pin 4 (for MKRZero SD: SDCARD_SS_PIN)
-
-- PixelStick Data Pin 6
-
 - Bluetooth
     - RX --> Arduino TX1
     - TX --> Arduino RX0
     - baudrate: 115200(default)
     - soft serial performs not so well at 115200, so use hard serial please
+
+- PixelStick Data Pin 8
+
+- Touch detection Pin 10
+
+- SD card attached as follows:
+    - CS   - pin 9
+    - MOSI - pin 11
+    - MISO - pin 12
+    - CLK  - pin 13
 
 ### Data format
 -Command file should have header and end like this:
@@ -64,212 +66,178 @@ more details at 'http://playground.arduino.cc/Main/Printf'
 
 -------------------------------------------
 TODO: acceleration sensor such as 'MMA7631'
-to change the t_Step(time step)
-i.e. horizontal pixel interval of an image
+to change tStep(time step)
+i.e. horizontal pixel interval of a frame
 */
 
 #include <Adafruit_NeoPixel.h>
 #include <SD.h>
-//#include <SoftwareSerial.h>
 
-#define Lighterval 3
-#define SDPin      4
-#define PixelPin   6
-#define LightPin   7
+#define Lighterval 255/5
+#define pixelPin   8
+#define SDPin      9
+#define touchPin   10
 #define BT_baud    115200
 #define myport     Serial
 
+
+// variables
 File
-    data,                             // current data file
-    root;                             // root dir of SD card
+    data,                            // current data file
+    root;                            // root dir of SD card
 uint8_t
-    n_Files = 0,                      // total txt file numbers in SD card
-    c_Index = 0,                      // current file index
-    LIGHT   = 0;
+    nFiles = 0,                      // total txt file numbers in SD card
+    cIndex = 0,                      // current file index
+    LIGHT  = 0;                      // light level
 uint16_t
-    n_LEDs  = 144,                    // pixel number
-    t_Step  = 10;                     // time interval, this controls displaying speed
+    nLEDs  = 80,                     // pixel number
+    tStep  = 10;                     // time interval, this controls displaying speed
 bool
-    RUN = false;                      // soft on-off switch
-String
-    FileNames;                        // this string storage all txt file names
-// About String FileNames:
-// I dont know how to create an appendable list of String in C++
-// (like "file_list.append('filename')" in python),
-// so I storage all filenames into this variable
-// FileNames = "#1file#2file#3file......#nfile"
-// Maybe something like "char *stringList" will be more elegant
+    STATE  = false,                  // on-off state of running
+    TOUCH  = false;                  // on-off state of touch detection
+char*
+    fileList[32];                    // storage all cmd file names
+/*
+now that char * is a pointer variable -- it is a int variable which storages an index pointing to a string -- we have:
+char* a = "hello";
+a --> 0x00000123456
+*a --> 'h'
+*(a+1) --> 'e'
+"%s",a --> "hello"
+so we can use char *a[] to storage a list of pointers which point to many strings' first char.
+Usually cmd files will be no more than 32, if needed you can give it more space ;-)
+*/
+Adafruit_NeoPixel pixel = Adafruit_NeoPixel(nLEDs, pixelPin, NEO_KHZ800 + NEO_GRB);
 
-Adafruit_NeoPixel
-    pixel = Adafruit_NeoPixel(n_LEDs, PixelPin, NEO_KHZ800 + NEO_GRB);
 
+// functions
 void
     HELP(),                           //
-    init_SD(),                        //
+    initSD(),                         //
     display(),                        //
-    listen_serial(),                  // handle all serial info
-    clear_pixel(),                    // turn all pixel off
-    pixel_cmd(),                      // interactive mode
+    listenSerial(),                   // handle all serial info
+    allPixel(uint8_t c=0),            // turn all pixel off
+    pixelCmd(),                       // interactive mode
     bar(float),                       // showing effect of progress bar or music amptitude
     rainbow(uint8_t),                 // embedded beautiful color pattern
-    receive_file(bool);               // receive commands from serial
-uint8_t
-    list_file(File, uint8_t),         // list all files in SD card and return numbers of all
-    readCapacitivePin(int);           // maybe future touchment detection add-ons
+    receiveFile(bool writeSD=false);  // receive commands from serial
 uint32_t
-    Wheel(byte);                      // work with "void rainbow(uint8_t)""
-String
-    get_filename(uint8_t*, String);   // return current cmd file name
+    Wheel(byte);                      // work with "void rainbow(uint8_t)"
+File
+    currentFile(File, char *);        // find current cmd file with correspond filename and return this file
+uint8_t
+    touchDetect(int pin=touchPin),    // return int 1-10 if pin is been touched else 0
+    listFile(File, uint8_t, uint8_t); // list all files in SD card
 
-
-void setup(){
-    myport.begin(BT_baud);
-    myport.print("Initializing");
-    delay(100); myport.print(".");
-    delay(100); myport.print(".");
-    delay(100); myport.println(".");
-
-    pinMode(10, OUTPUT);
-    pinMode(13, OUTPUT);
-    pinMode(5,  INPUT);
-
-    pixel.begin();
-    pixel.show();
-    clear_pixel();
-
-    init_SD();
-    myport.print("Try 'help' for more information.\n>>> ");
-}
-
-void loop(){
-    listen_serial();
-    if (RUN) display();
-}
 
 void HELP(){
-    // No more info output unless you know how to avoid
-    // crash caused by 'too many' serial output.
+    // it would be better keep 'No more info output' to avoid RAM crash caused by too many string.
     ///*
-    // uncomment this part for nano
-    myport.println("PixelStick by hank");
-    myport.println("Version: 1.0.1 https://github.com/hankso/MyPixelStick");
-    myport.println("Usage: [run|stop|next|prev|push|ls|ips|pixel|clear|time|bar]");
+    // uncomment this part for nano | uno
+    myport.println(F("PixelStick by hank"));
+    myport.println(F("Version: 1.1.0 https://github.com/hankso/MyPixelStick"));
+    myport.println(F("Usage: [state|next|prev|push|ls|ips|pixel|touch|clear|time|bar|light]"));
     //*/
     /*
-    // uncomment this part for uno
-    myport.println("PixelStick by hank https://github.com/hankso/MyPixelStick");
-    myport.println("Version: 1.0.1");
-    myport.println("Usage:");
-    myport.println("    help:   show this message");
-    myport.println("    run:    start displaying");
-    myport.println("    stop:   stop displaying");
-    myport.println("    next:   display next photo(only works with SD card)");
-    myport.println("    prev:   display prev photo(only works with SD card)");
-    myport.println("    push:   start sending data from serial");
-    myport.println("    ls:     list files");
-    myport.println("    ips:    interactive pixelstick. control pixels in format (i r g b)");
-    myport.println("    pixel:  set num of pixels(e.g. 'pixel 30'|'pixel 50')");
-    myport.println("    clear:  turn off all pixels");
-    myport.println("    time:   set time-duration(e.g. 'time-10'|'time+50'|'time=20')");
-    myport.println("    bar:    show music amptitude or process bar");
+    // uncomment this part for mega2560
+    myport.println(F("PixelStick by hank https://github.com/hankso/MyPixelStick"));
+    myport.println(F("Version: 1.1.0"));
+    myport.println(F("Usage:"));
+    myport.println(F("    help:   show this message"));
+    myport.println(F("    state:  set running state with 'state on'|'state off'"));
+    myport.println(F("    next:   display next photo(only works with SD card)"));
+    myport.println(F("    prev:   display prev photo(only works with SD card)"));
+    myport.println(F("    push:   start sending data from serial"));
+    myport.println(F("    ls:     list files"));
+    myport.println(F("    ips:    REPL mode. ips(interactive pixelstick). control pixels as format (i r g b)"));
+    myport.println(F("    pixel:  set num of pixels(e.g. 'pixel 30'|'pixel 50')"));
+    myport.println(F("    touch:  open or close touch-detect function at pin 10(default) with 'touch on'|'touch off'"))
+    myport.println(F("    clear:  turn off all pixels"));
+    myport.println(F("    time:   set time-duration(e.g. 'time-10'|'time+50'|'time=20'|'time 50')"));
+    myport.println(F("    bar:    show as process bar or music amptitude"));
+    myport.println(F("    light:  turn on all pixels as light(e.g. 'light 10'|'light 255')"));
     */
-
 }
 
-void clear_pixel(){
-    for (int i = 0; i < n_LEDs; i++)
-        pixel.setPixelColor(i, 0, 0, 0);
+void allPixel(uint8_t c){
+    for (int i = 0; i < nLEDs; i++)
+        pixel.setPixelColor(i, c, c, c);
     pixel.show();
 }
 
-void init_SD(){
+void initSD(){
     myport.print("Loading SD card: ");
-    if (SD.begin(SDPin)){
-        myport.println("done!");
-        root = SD.open("/");
-        n_Files = list_file(root, 0);
+    if (!SD.begin(SDPin)){
+        myport.println("failed, maybe not inserted.");
+        return;
     }
-    myport.println("failed, maybe not inserted.");
+    myport.println("done!");
+
+    root = SD.open("/");
+    nFiles = listFile(root, 0, 0);
+    myport.printf("ls finished, found %d cmd files, current file: %s\n", nFiles, fileList[cIndex]);
+    // for(int i = 0; i < nFiles; i++) myport.printf("%s\n",fileList[i]);
 }
 
-uint8_t list_file(File r = root, uint8_t numTabs = 0){
-    if (!r){
-        myport.println("list_file error: dir unreadable, terminated.");
-        return 0;
+uint8_t listFile(File r, uint8_t count, uint8_t numTabs) {
+    // please use '    ' instead of '\t' because in some cases length of '\t' is uncertainty
+    if (!r) {
+        myport.println(F("\nlistFile error: dir unreadable, terminated.\n"));
+        return count;
     }
-    uint8_t count = 0;
-    File f;
-    while (true){
-        f = r.openNextFile();
-        if (!f) break;
-        for (uint8_t i = 0; i < numTabs; i++){
-            myport.print("\t");
-        }
-        if (f.isDirectory()){
-            myport.println(String(f.name()) + "/");
-            list_file(f, numTabs + 1);
+    delay(200);
+    if (numTabs == 0) myport.println(r.name());
+    while (true) {
+        File file = r.openNextFile();
+        if (!file) break;
+        delay(200);
+        for (uint8_t i = 0; i < numTabs; i++) myport.print("|   ");
+        if (file.isDirectory()) {
+            myport.printf("|---%s/\n", file.name());
+            count = listFile(file ,count, numTabs + 1);
         }
         else{
-            if (String(f.name()).endsWith("txt")){
-                // record file into FileNames with '#' indicator
-                FileNames += "#" +
-                             String(count) +
-                             r.name() +
-                             "/" + f.name();
-                if (c_Index == count){
-                    myport.printf("  > %2d ", count);
-                    myport.print(String(f.name()) + "\t");
-                }
-                else{
-                    myport.printf("\t%2d ", count);
-                    myport.print(String(f.name()) + "\t");
-                }
-                myport.println(f.size(), DEC);
+            String temp = file.name();
+            temp.toLowerCase();
+            if (temp.endsWith(".cmd")) {
+                if (cIndex == count)
+                    myport.printf("| > %2d ", count);
+                else
+                    myport.printf("|   %2d ", count);
+                myport.println(temp + "  " + String(file.size()/1024.0) + "KB");
+                // TODO debug this
+                // file_list[count] = const_cast<char*>(temp.c_str());
                 count++;
             }
-            else{
-                myport.println("\t   " +
-                               String(f.name()));
-            }
+            else myport.println("|   " + temp);
         }
-        f.close();
+        file.close();
     }
-    r.rewindDirectory();
     return count;
 }
 
-String get_filename(uint8_t* index, String namelist){
-    if (!root) return "No SD card.";
-    // FileNames : "#1filename#2filename......#nfilename"
-    // FileNames.indexOf("#n") --> index of "#n"
-    // FileNames.indexOf("#", index) --> index of "#n+1"
-    *index = *index > n_Files ?
-              n_Files : (*index < 0 ? 0 : *index);
-    int i = namelist.indexOf("#" + String(*index));
-    int j = namelist.indexOf("#", i);
-    return namelist.substring(i, j);
-}
-
-void pixel_cmd(){
+void pixelCmd() {
     int i;
     uint8_t r, g, b;
-    while (true){
-    	myport.print("ips> ");
-    	// To avoid parseInt() return 0 because of '\r','\n'
-    	// especially when receving "\r\n", set threshold to 3.
-    	// so that it can handle both "1\r\n2\r\n 3\r\n 4\r\n"
-    	// and "1\n2\n3\n4\n"
-        while (myport.available() < 3){delay(100);}
+    while (true) {
+        myport.print("ips> ");
+        /*
+        To avoid parseInt() return 0 because of '\r','\n'
+        especially when receving "\r\n", set threshold to 3.
+        so that it can handle both "1\r\n2\r\n 3\r\n 4\r\n"
+        and "1\n2\n3\n4\n"
+        */
+        while (myport.available() < 3) {delay(100);}
         i = myport.parseInt();
         if (i == -1) break;
         myport.printf("%3d ", i);
-        while (myport.available() < 3){delay(100);}
+        while (myport.available() < 3) {delay(100);}
         r = myport.parseInt();
         myport.printf("%3d ", r);
-        while (myport.available() < 3){delay(100);}
+        while (myport.available() < 3) {delay(100);}
         g = myport.parseInt();
         myport.printf("%3d ", g);
-        while (myport.available() < 3){delay(100);}
+        while (myport.available() < 3) {delay(100);}
         b = myport.parseInt();
         myport.printf("%3d \n", b);
         pixel.setPixelColor(i, r, g, b);
@@ -277,39 +245,94 @@ void pixel_cmd(){
     }
     myport.println("terminated('-1' detected)");
     // "-1 -1 -1 -1\r\n" clean serial buff
-    while(myport.available()){myport.read();}
-    clear_pixel();
+    while (myport.available()) {myport.read();}
+    allPixel();
 }
 
-void display(){
-    // use as light
-    if (readCapacitivePin(LightPin) > 5){
-        LIGHT++;
-        if (LIGHT > Lighterval) LIGHT = 0;
-        uint8_t t = LIGHT*(255/Lighterval);
-        for(int i; i < n_LEDs; i++)
-            pixel.setPixelColor(i, t, t, t);
+void bar(float rate) {
+    if (rate <= 1 && rate >= 0) {
+        uint8_t n = nLEDs * rate;
+        pixel.setPixelColor(n, 10, 200, 10);
+        while (n > 0)
+            pixel.setPixelColor(--n, 128, 128, 128);
         pixel.show();
+        delay(1000);
+        allPixel();
     }
-    if (!root)
-        rainbow(5);
-    else{
-        String filename = get_filename(&c_Index, FileNames);
-        char t[filename.length()];
-        filename.toCharArray(t, filename.length());
-        data = SD.open(t);
+}
 
-        if (!data)
-            myport.println("Error when trying to open file " +
-                           String(data.name()));
-        else{
+void rainbow(uint8_t wait) {
+    int i, j;
+    for(j = 0; j < 256; j++) {
+        for(i = 0; i < nLEDs; i++)
+            pixel.setPixelColor(i, Wheel((i + j) & 255));
+        pixel.show();
+        delay(wait);
+    }
+}
+
+uint32_t Wheel(byte WheelPos) {
+      WheelPos = 255 - WheelPos;
+      if (WheelPos < 85)
+          return pixel.Color((255 - WheelPos*3)/3, 0, (WheelPos*3)/3);
+      if (WheelPos < 170){
+          WheelPos -= 85;
+          return pixel.Color(0, (WheelPos*3)/3, (255 - WheelPos*3)/3);
+      }
+      else{
+          WheelPos -= 170;
+          return pixel.Color((WheelPos*3)/3, (255 - WheelPos*3)/3, 0);
+      }
+}
+
+uint8_t touchDetect(int pin) {
+    byte bitmask = digitalPinToBitMask(pin);
+    volatile uint8_t* PORT = portOutputRegister(digitalPinToPort(pin));
+    volatile uint8_t* PIN  = portInputRegister(digitalPinToPort(pin));
+    volatile uint8_t* DDR  = portModeRegister(digitalPinToPort(pin));
+    *DDR |= bitmask; *PORT &= ~(bitmask);
+    delay(1);
+    *DDR &= ~(bitmask); *PORT |= bitmask;
+    uint8_t times = 0; while (!(*PIN & bitmask)) {times++;}
+    *DDR |= bitmask; *PORT &= ~(bitmask);
+    return times;
+}
+
+File currentFile(File r, char * filename) {
+    File null;
+    if (!r) {return null;}
+    while (true) {
+        File file = r.openNextFile();
+        if (!file) break;
+        if (file.isDirectory()) {
+            File next = currentFile(file, filename);
+            if (next) return next;
+        }
+        else {
+            if (String(file.name())==String(filename))
+                return file;
+        }
+        file.close();
+    }
+    return null;
+}
+
+void display() {
+    if (!root) rainbow(5);
+    else {
+        data = currentFile(root, fileList[cIndex]);
+        if (!data) {
+            myport.printf("Error when trying to open file %s\n", data.name());
+            data.close();
+        }
+        else {
             data.readStringUntil('#');
             data.readStringUntil('#');
             // int i, r, g, b;
             uint8_t i;
             uint32_t temp;
-            while (data.available()){
-                while ( (i = (temp = data.parseInt())>>24) >= n_LEDs ){} //doing_nothing
+            while (data.available()) {
+                while ( (i = (temp = data.parseInt())>>24) >= nLEDs ) {} //doing_nothing
                 /*
                 r = data.parseInt();
                 g = data.parseInt();
@@ -317,20 +340,23 @@ void display(){
                 pixel.setPixelColor(i,
                                     data.parseInt(),
                                     data.parseInt(),
-                                    data.parseInt());*/
+                                    data.parseInt());
+                */
                 pixel.setPixelColor(i, temp & 0xffffff);
-                if (i == n_LEDs - 1){
+                if (i == nLEDs - 1) {
                     pixel.show();
                     myport.println(millis());
-                    delay(t_Step);
+                    delay(tStep);
                 }
             }
-            clear_pixel();
+            allPixel();
+            data.close();
         }
+        STATE = false;
     }
 }
 
-void receive_file(bool writeSD = false){
+void receiveFile(bool writeSD){
     /*
     Param writeSD used for debugging, I'd like to test whether
     realtime uploading data works: I'm afraid serial is a little
@@ -355,220 +381,161 @@ void receive_file(bool writeSD = false){
     which means using "parseInt" only one time. That saves time.
 
     However, index takes 8 bit space of arduino and if
-    n_LEDs > 255, eh...... try uint64_t please  _(:3 」∠)_
+    nLEDs > 255, eh...... try uint64_t please  _(:3 」∠)_
     */
-    if (!root) writeSD = false; // in case SD is not inserted
-
-    // 'readStringUntil' has a relatively short timeout
-    // we need time to choose which file to send, etc
-    // so use while(){} to let stick wait
-    while (myport.read()!='#'){}
+    if (writeSD && !root) writeSD = false; // in case SD is not inserted
+    /*
+    'readStringUntil' has a relatively short timeout
+    we need time to choose which file to send, etc
+    so use while(){} to let stick wait
+    */
+    while (myport.read()!='#') {}
     String filename = myport.readStringUntil('#');
     myport.println("Receiving " + String(filename));
     File f;
-    if (writeSD){
-        // I was totally shocked!!!!!!!!!
-        // "SD.open(const char*, uint8_t)" only accept char list
-        // So I can not use "SD.open(String filename)"!!!
-        // C++ really teachs me how to be a man
-        char t[filename.length()];
-        filename.toCharArray(t, filename.length());
-        f = SD.open(t, FILE_WRITE);
-    }
+    if (writeSD) f = SD.open(filename, FILE_WRITE);
     delay(10);
-    /*
-    int i, r, g, b;
-    myport.println("  i   r   g   b");
-    */
     uint32_t temp;
     uint8_t i;
+    myport.println("Time(ms) i  temp  available");
     while (true){
         temp = myport.parseInt();
         i = temp >> 24;
-        myport.printf("%d %d %d %d\n", millis(), i, temp, myport.available());
-        // myport.print(String(millis())+" "+String(i)+"\n");
-        if (i < n_LEDs) pixel.setPixelColor(i, temp & 0xffffff);
-        if (writeSD)
+        // myport.printf("%d %d %d %d\n", millis(), i, temp, myport.available());
+        myport.printf("%6ld %3d ", millis(), i);
+        myport.printf("%3d %3d %3d\n", (temp>>16)&0xff, (temp>>8)&0xff, temp&0xff);
+        if (i < nLEDs) pixel.setPixelColor(i, temp & 0xffffff);
+        if (writeSD) f.println(temp);
             // f.printf("%d %d %d %d\n", i, r, g, b);
-            f.println(temp);
-        // myport.printf("%3d %3d %3d %3d\n", i, r, g, b);
-        if (i == n_LEDs - 1){
+        if (i == nLEDs - 1){
             pixel.show();
             myport.println(millis());
-            delay(t_Step);
+            delay(tStep);
         }
         if (temp == 4294967295) // uint32_t storage 4294967295 as -1(-1 means end)
         {
             if (myport.parseInt() == -1) // double check
             {
                 myport.println("terminate");
-                // clear buff
-                while(myport.available()){myport.read();}
+                while(myport.available()) myport.read(); // clear buff
                 break;
             }
         }
     }
-
     if (writeSD){
         f.println("-1-1-1-1");
         f.close();
-        n_Files = list_file(root);
+        nFiles = listFile(root, 0, 0);
     }
-	delay(1000);
-    clear_pixel();
+    delay(1000);
+    allPixel();
 }
 
-void listen_serial(){
+void listenSerial(){
     if (myport.available()){
         String msg = myport.readStringUntil('\n');
         if (msg.endsWith(String('\r'))) msg = msg.substring(0, msg.length()-1);
         if (msg.length()){
             myport.println(msg);
             delay(200);
-
-            if (msg.startsWith("time")){
-                if (msg.length() > 4){
-                    int n = msg.substring(4).toInt();
-                    //  "time=10"|"time = 10"|"time 10" can be recognized here
-                    if ((msg.indexOf('=') > 0 || msg.indexOf('+') == -1)
-                        && msg.indexOf('-') == -1)
-                        t_Step = n;
-                    else
-                        t_Step += n;
-                    if (t_Step < 0) t_Step = 0;
-                }
-                myport.println("t_Step: " + String(t_Step));
-            }
-            else if (msg.startsWith("pixel")){
-                if (msg.length() > 5){
+            if (msg.startsWith("pixel")) {
+                if (msg.length() > 5) {
                     if (msg.substring(5).toInt() > 0){
-                        n_LEDs = msg.substring(5).toInt();
-                        pixel.updateLength(n_LEDs);
+                        nLEDs = msg.substring(5).toInt();
+                        pixel.updateLength(nLEDs);
                     }
                 }
-                myport.println("n_LEDs: " + String(n_LEDs));
+                myport.println("nLEDs: " + String(nLEDs));
             }
-            else if (msg.startsWith("bar") && msg.length() > 3){
-                bar(abs(msg.substring(3).toFloat()));
+            else if (msg.startsWith("time")) {
+                if (msg.length() > 4) {
+                    int n = msg.substring(4).toInt();
+                    if ((msg.indexOf('=') > 0 || msg.indexOf('+') == -1)
+                        && msg.indexOf('-') == -1) // "time=10"|"time = 10"|"time 10" can be recognized here
+                        tStep =  n;
+                    else
+                        tStep += n;
+                    if (tStep < 0) tStep = 0;
+                }
+                myport.println("tStep: " + String(tStep));
             }
-            else if (msg == "run") {
-                if (!root) init_SD();
-                RUN = true;
-                myport.println("RUN state: " + String(RUN));
+            else if (msg.startsWith("state")) {
+                if (msg.length() > 6) {
+                    if      (msg.substring(6) == "on")  STATE = true;
+                    else if (msg.substring(6) == "off") STATE = false;
+                }
+                myport.println("state: " + String(STATE));
             }
-            else if (msg == "stop"){
-                RUN = false;
-                myport.println("RUN state: " + String(RUN));
+            else if (msg.startsWith("touch")) {
+                if (msg.length() > 6){
+                    if      (msg.substring(6) == "on")  TOUCH = true;
+                    else if (msg.substring(6) == "off") TOUCH = false;
+                }
+                myport.println("TOUCH: " + String(TOUCH));
             }
-            else if (msg == "clear"){
-                clear_pixel();
-                myport.println("All pixels clear now");
+            else if (msg == "push") {
+                receiveFile();
+                myport.println(F("push done. Thank you"));
+            }
+            else if (msg == "clear") {
+                allPixel();
+                myport.println(F("all pixels clear now"));
+            }
+            else if (msg == "next"){
+                cIndex++; listFile(root, 0, 0);
+                myport.printf("current file: %s\n", fileList[cIndex]);
+            }
+            else if (msg == "prev"){
+                cIndex--; listFile(root, 0, 0);
+                myport.printf("current file: %s\n", fileList[cIndex]);
+            }
+            else if (msg.startsWith("light")) {
+                if (msg.length() > 5) allPixel(LIGHT = msg.substring(5).toInt());
+                myport.println("light: " + String(LIGHT));
             }
             else if (msg == "ips")
-                pixel_cmd();
-            else if (msg == "push"){
-                receive_file();
-                myport.println("push done. Thank you.");
-            }
+                pixelCmd();
+            else if (msg.startsWith("bar") && msg.length() > 3)
+                bar(abs(msg.substring(3).toFloat()));
             else if (msg == "ls")
-                list_file();
-            else if (msg == "next")
-                myport.println("current file: " + get_filename(&++c_Index, FileNames));
-            else if (msg == "prev")
-                myport.println("current file: " + get_filename(&--c_Index, FileNames));
+                nFiles = listFile(root, 0, 0);
             else if (msg == "help")
                 HELP();
             else myport.println(msg + ": command not found");
         }
         myport.print("\n>>> ");
     }
-    else{
-        //Serial.println(millis());
-        delay(200);
+    else delay(200);
+}
+
+
+void setup(){
+    myport.begin(BT_baud);
+    myport.print(F("Initializing"));
+    delay(100); myport.print(".");
+    delay(100); myport.print(".");
+    delay(100); myport.println(".");
+
+    initSD();
+
+    pixel.begin();
+    pixel.show();
+
+    allPixel(0);
+
+    myport.print(F("\nTry 'help' for more information.\n>>> "));
+}
+
+void loop(){
+    listenSerial();
+
+    if (STATE) display();
+
+    if(TOUCH) {
+        if (touchDetect(touchPin) > 5){
+            allPixel(LIGHT+=Lighterval);
+            myport.println("light: " + String(LIGHT));
+            delay(3000);
+        }
     }
-}
-
-void bar(float rate){
-    if (rate <= 1 && rate >= 0){
-        uint8_t n = n_LEDs * rate;
-        pixel.setPixelColor(n, 10, 200, 10);
-        while (n > 0)
-            pixel.setPixelColor(--n, 128, 128, 128);
-        pixel.show();
-        delay(1000);
-        clear_pixel();
-    }
-}
-
-void rainbow(uint8_t wait){
-    int i, j;
-    for(j = 0; j < 256; j++){
-        for(i = 0; i < n_LEDs; i++)
-            pixel.setPixelColor(i, Wheel((i + j) & 255));
-        pixel.show();
-        delay(wait);
-  }
-}
-
-uint32_t Wheel(byte WheelPos){
-      WheelPos = 255 - WheelPos;
-      if (WheelPos < 85)
-          return pixel.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-      if (WheelPos < 170){
-          WheelPos -= 85;
-          return pixel.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-      }
-      else{
-          WheelPos -= 170;
-          return pixel.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
-      }
-}
-
-uint8_t readCapacitivePin(int pinToMeasure) {
-    // this function is from http://playground.arduino.cc/Code/CapacitiveSensor
-    // pretty useful when implementing touch-detect utilities
-    // Thanks to Mario Becker et al.
-
-    volatile uint8_t* port;
-    volatile uint8_t* ddr;
-    volatile uint8_t* pin;
-    byte bitmask;
-    port = portOutputRegister(digitalPinToPort(pinToMeasure));
-    ddr = portModeRegister(digitalPinToPort(pinToMeasure));
-    bitmask = digitalPinToBitMask(pinToMeasure);
-    pin = portInputRegister(digitalPinToPort(pinToMeasure));
-    // Discharge the pin first by setting it low and output
-    *port &= ~(bitmask);
-    *ddr |= bitmask;
-    delay(1);
-    // Make the pin an input with the internal pull-up on
-    *ddr &= ~(bitmask);
-    *port |= bitmask;
-    uint8_t cycles = 17;
-    if      (*pin & bitmask) { cycles = 0;}
-    else if (*pin & bitmask) { cycles = 1;}
-    else if (*pin & bitmask) { cycles = 2;}
-    else if (*pin & bitmask) { cycles = 3;}
-    else if (*pin & bitmask) { cycles = 4;}
-    else if (*pin & bitmask) { cycles = 5;}
-    else if (*pin & bitmask) { cycles = 6;}
-    else if (*pin & bitmask) { cycles = 7;}
-    else if (*pin & bitmask) { cycles = 8;}
-    else if (*pin & bitmask) { cycles = 9;}
-    else if (*pin & bitmask) { cycles = 10;}
-    else if (*pin & bitmask) { cycles = 11;}
-    else if (*pin & bitmask) { cycles = 12;}
-    else if (*pin & bitmask) { cycles = 13;}
-    else if (*pin & bitmask) { cycles = 14;}
-    else if (*pin & bitmask) { cycles = 15;}
-    else if (*pin & bitmask) { cycles = 16;}
-    // Discharge the pin again by setting it low and output
-    // It's important to leave the pins low if you want to
-    // be able to touch more than 1 sensor at a time - if
-    // the sensor is left pulled high, when you touch
-    // two sensors, your body will transfer the charge between
-    // sensors.
-    *port &= ~(bitmask);
-    *ddr |= bitmask;
-    return cycles;
 }

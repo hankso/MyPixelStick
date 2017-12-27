@@ -89,25 +89,29 @@ def find_port():
         print('choose port from %s: '%' | '.join(port_list))
         while 1:
             _ = raw_input('name: ')
-            if _ in port_list:
-                return _
+            if _ in port_list: return _
             print('invalid input...')
     raise IOError('No port available! Abort.')
+
+def from_cmd(s):
+    print('unimplemented')
+    pass
 
 def get_Step(s):
     try:
         print('connected. shaking hands')
         s.write('time')
-        time.sleep(2.5)
+        time.sleep(3)
         _ = s.read_all()
+        print(_)
         _ = _[_.find('t_Step')+7:]
         t_Step = int(_[:_.find('\r\n')])/1000.
     except:
-        t_Step = 0.03
+        t_Step = 0.05
     return t_Step
 
 def parse_opt():
-    n_LEDs = 30
+    n_LEDs = 50
     rotate = True
     try:
         if len(sys.argv) > 1:
@@ -116,7 +120,7 @@ def parse_opt():
     except getopt.GetoptError, e:
         print("Unknown parameter '{}'".format(e.opt))
         HELP()
-
+    print(sys.argv)
     for i,j in opts:
         if i == '-h': HELP()
         elif i == '-i':
@@ -146,19 +150,30 @@ def parse_opt():
 if __name__ == '__main__':
     # this is virtual leds that in the perpendicular direction of pixelstick
     # in other word, in the parallel direction with movement
-    from_file, to_file, n_LEDs, rotate = parse_opt()
-    m_LEDs = 100
 
-    cmd_Step = 0.0015 # 1.5ms
-    extra_Step = 0.015 # 15ms
+    #from_file, to_file, n_LEDs, rotate = parse_opt()
+
+    n_LEDs = 144
+    from_file = '/home/hank/2018.png'
+    to_file = '/home/hank/Documents/Git/MyPixelStick/cmds/test'
+    rotate = False
+    brightness_descent = 15
+
+    print(from_file, to_file, n_LEDs, rotate)
+
+    m_LEDs = int(0.4*n_LEDs)
+
+    cmd_Step = 0.0011 # 1.1ms
+    extra_Step = 0.001 # 1ms
 
     port = find_port()
     print('Using port: '+port)
 
     s = serial.Serial(port = port, baudrate = 115200)
     t_Step = get_Step(s)
-    print('Current s_Step: {}ms'.format(t_Step*1000))
-
+    s.write('pixel %d\n'%n_LEDs)
+    print('Current t_Step: {}ms'.format(t_Step*1000))
+    
     if from_file[-3:] in ['jpg', 'png']:
         MODE = 'PHOTO'
         # step 1
@@ -179,14 +194,26 @@ if __name__ == '__main__':
         try: img = new()
         except: HELP()
         if img is None: HELP()
-
+    
+    elif from_file[-3:] == 'cmd':
+        from_cmd(s)
+        sys.exit()
+    
+    else: raise IOError('File type unsupported. Abort.')
 
     # step 2
     h, w = img.shape[:2]
-    v_d = w/n_LEDs
-    h_d = h/m_LEDs
+    if w%(n_LEDs-1) > n_LEDs/2:
+        w += n_LEDs - w%(n_LEDs-1)
+    else: w = w/n_LEDs*n_LEDs
+    if h%(m_LEDs-1) > m_LEDs/2:
+        h += m_LEDs - h%(m_LEDs-1)
+    else: h = h/m_LEDs*m_LEDs
+    
+    v_d = (w-1)/(n_LEDs-1)
+    h_d = (h-1)/(m_LEDs-1)
     # step 3
-    img = img[::h_d, ::v_d]
+    cmd = cv2.resize(img, (w+1, h+1))[::h_d, ::v_d]
 
     # save cmd file to debug, you can comment it
     to_file += '_{}x{}_n{}'.format(w, h, n_LEDs) + '.cmd'
@@ -202,31 +229,39 @@ if __name__ == '__main__':
 
     cv2.namedWindow('src', cv2.WINDOW_FREERATIO)
     stamp = time.time()
+    print('start time: {}'.format(time.time()))
     while 1:
         try:
-            for row in range(img.shape[0]):
+            for row in range(cmd.shape[0]):
+                # show img window
                 cv2.imshow('src', cv2.line(img.copy(),
-                                           (0, row),
-                                           (img.shape[1], row),
+                                           (0, row*h_d),
+                                           (img.shape[1], row*h_d),
                                            (10, 240, 5),
-                                           2, cv2.LINE_AA))
-                for i, (b, g, r) in enumerate(img[row]): # opencv is BGR mode
+                                           1, cv2.LINE_AA))
+                cv2.waitKey(1)
+                
+                for i, pixel in enumerate(cmd[row]):
                     # filter repeating datas
-                    if row > 0:
-                        if ([b, g, r] == img[row-1, i]).all():
-                            continue
+                    #if row > 0:
+                     #   if (pixel == cmd[row-1, i]).all():
+                            #print('skip row %d'%row)
+                      #      continue
 
                     # adjust cmd_Step for best performance
                     time.sleep(cmd_Step)
-                    print(s.read_all(), end='')
-
-                    t = str(i<<24|r<<16|g<<8|b) + '\n' # pixelstick is GRB mode, but we can set it in arduino
+                    #print(s.read_all(), end='')
+                    
+                    b, g, r = np.uint8(pixel/brightness_descent)
+                    #print('i: %d, r: %d, g: %d, b: %d'%(i,r,g,b))
+                    # opencv is BGR mode and pixelstick is GRB|RGB mode, but we can set it in arduino
+                    t = str(i<<24|g<<16|r<<8|b) + '\n'
                     f.write(t)
                     s.write(t)
 
                 # adjust extra_Step for best performance
                 time.sleep(t_Step + extra_Step)
-                print(s.read_all(), end='')
+                #print(s.read_all(), end='')
                 if t != '\n':
                     t = '\n'
                     f.write(t)
@@ -237,8 +272,9 @@ if __name__ == '__main__':
                     frames = int(duration/ftd)
                     for _ in range(frames): img = new()
                     if img is None: break # going to the end of the video
-                    img = img[::h_d, ::v_d]
+                    cmd = cv2.resize(img, (w+1, h+1))[::h_d, ::v_d]
                     stamp += ftd * frames
+                    
 
             if MODE == 'PHOTO': break
 
@@ -246,17 +282,19 @@ if __name__ == '__main__':
             f.write('-1-1-1-1')
             s.write('-1-1-1-1')
             print('Terminated.')
-            sys.exit()
+            break
 
     print('Done!')
+    print('finish time: {}'.format(time.time()))
     print('Image size: %d x %d, v_d: %d, h_d: %d'%(w, h, v_d, h_d))
     print('n_LEDs: %d  m_LEDs: %d'%(n_LEDs, m_LEDs))
     print('From %s to %s'%(from_file, to_file))
     print(s.read_all())
     f.write('-1-1-1-1')
     s.write('-1-1-1-1')
-    time.sleep(8)
+    time.sleep(3)
     print(s.read_all())
     f.close()
     s.close()
     if MODE == 'VIDEO': video.release()
+    cv2.destroyAllWindows()
